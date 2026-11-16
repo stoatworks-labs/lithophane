@@ -257,6 +257,54 @@ double scale( int j )
 {
 	return 0.0625 * std::pow( std::sqrt( 2.0 ), j );
 }
+
+/// The spec's discrete kernel of variance v px^2: exp( -i^2 / 2 s^2 ) over
+/// |i| <= ceil( 4 sqrt v ), normalised, s found by bisection on the discrete
+/// variance (the harness's own search, in long double, 400 halvings).
+std::vector< double > exactKernel( double v )
+{
+	const int R = std::max( 1, static_cast< int >( std::ceil( 4.0 * std::sqrt( v ) ) ) );
+	auto make   = [ R ]( long double s, std::vector< double >* out ) {
+        long double sum = 0.0L, second = 0.0L;
+        std::vector< long double > g( static_cast< size_t >( 2 * R + 1 ) );
+        for( int i = -R; i <= R; ++i )
+        {
+            g[ static_cast< size_t >( i + R ) ] = std::exp( -0.5L * i * i / ( s * s ) );
+            sum += g[ static_cast< size_t >( i + R ) ];
+            second += static_cast< long double >( i ) * i * g[ static_cast< size_t >( i + R ) ];
+        }
+        if( out )
+        {
+            out->resize( g.size() );
+            for( size_t k = 0; k < g.size(); ++k )
+                ( *out )[ k ] = static_cast< double >( g[ k ] / sum );
+        }
+        return second / sum;
+    };
+	long double lo = 1e-4L, hi = 8.0L * std::sqrt( static_cast< long double >( v ) ) + 4.0L;
+	for( int i = 0; i < 400; ++i )
+	{
+		const long double mid = 0.5L * ( lo + hi );
+		( make( mid, nullptr ) < v ? lo : hi ) = mid;
+	}
+	std::vector< double > k;
+	make( 0.5L * ( lo + hi ), &k );
+	return k;
+}
+
+/// The spec's realisation of scale j at a pitch, as a 1-D line spread over
+/// pixels (the 2-D kernel is separable, so a line one pixel wide spreads
+/// as the 1-D kernel across it): a delta under a quarter pixel, otherwise
+/// the discrete kernel of variance sigma_px^2 (exact through the decimation
+/// too: the B-spline chain's variance is sigma^2, its shape within the
+/// spline bound of this kernel).
+std::vector< double > realised( int j, double pitch )
+{
+	const double sp = scale( j ) / pitch;
+	if( sp < 0.25 )
+		return { 1.0 };
+	return exactKernel( sp * sp );
+}
 } // namespace hp
 
 //===========================================================================
@@ -866,16 +914,19 @@ int runAttenuation( const Perturb& perturb )
 /// light, row-averaged; and its measures against the prediction.
 struct LineMeasure
 {
-	double l1[ 3 ], l1Tol[ 3 ], m2[ 3 ], m2Want[ 3 ], m2Tol[ 3 ], sigmaPx[ 3 ], sigmaWantPx[ 3 ];
+	double l1[ 3 ], l1Tol[ 3 ], m2[ 3 ], m2Want[ 3 ], m2Tol[ 3 ], sigmaPx[ 3 ], sigmaWantPx[ 3 ], l1Mix[ 3 ], l1MixTol[ 3 ];
 };
 
 int runBlur( const Perturb& perturb )
 {
-	std::printf( "\n=== blur: a one-pixel white line (Thinnest d_l = 0.6, 0.8, 1.5, 3 mm) on black (Thickest 6 mm), Porcelain, minus the blank card:\n"
-	             "    the excess against the column model's a(d_l) LSF(d_l) - a(6) LSF(6), the LSFs by quadrature of the multipole; its second moment\n"
-	             "    (the blur radius, growing with d) and its L1 distance; a column at every phase 0..63 at 0.8 mm and at eight phases otherwise, a row\n"
-	             "    at eight phases, measured along y\n" );
-	const double lines[] = { 0.6, 0.8, 1.5, 3.0 };
+	std::printf( "\n=== blur: a one-pixel white line (Thinnest d_l = 0.6, 0.8, 1.125, 1.5, 3 mm) on black (Thickest 6 mm), Porcelain, minus the blank\n"
+	             "    card: the excess against the column model's a(d_l) LSF(d_l) - a(6) LSF(6), the LSFs by quadrature of the multipole; its second\n"
+	             "    moment (the blur radius, growing with d) and its L1 distance; then its L1 distance from the plugin's own mixture (its table's\n"
+	             "    weights, interpolated, through the spec's realisation of each Gaussian); a column at every phase 0..63 at 0.8 mm and at eight\n"
+	             "    phases otherwise, a row at eight phases, measured along y\n" );
+	//1.125 mm is midway between two rows of the weight table (0.5 + 12.5 x
+	//0.05): the GPU's interpolation between rows is measured there.
+	const double lines[] = { 0.6, 0.8, 1.125, 1.5, 3.0 };
 	//The predictions are physical: computed once, in mm, for every raster.
 	struct Pred
 	{
@@ -906,7 +957,10 @@ int runBlur( const Perturb& perturb )
 		const int w = raster.w, h = raster.h;
 		const double pitch = hPlate( pPlate( 100.0 ) ) / w;
 		const Floats blank = flatCard( w, h, 0.0f, 0.0f, 0.0f );
-		double sigmaAt[ 4 ][ 3 ] = {};
+		std::vector< std::vector< double > > kernels( 15 );
+		for( int j = 0; j < 15; ++j )
+			kernels[ static_cast< size_t >( j ) ] = hp::realised( j, pitch );
+		double sigmaAt[ 5 ][ 3 ] = {};
 		for( size_t li = 0; li < preds.size(); ++li )
 		{
 			const Pred& pr = preds[ li ];
@@ -921,6 +975,45 @@ int runBlur( const Perturb& perturb )
 			const plate::Plan plan = rb.plugin.LastPlan();
 			const double eps       = kStoreRoundings * kStore + kEncode + accumulation( plan );
 
+			//The plugin's own mixture at the line's and the background's
+			//thickness: its table's weights (the plugin's data, the one thing
+			//read from it), interpolated between rows as the spec says, through
+			//the spec's realisation of each scale (the harness's kernels).
+			//Against this the GPU's passes are measured tightly; against the
+			//multipole above, the physics with the fit's allowance.
+			const plate::FitTable& table = plate::TableFor( 0 );
+			auto weightsAt = [ & ]( double d, int c ) {
+				std::array< double, 15 > wv {};
+				const double x = ( d - 0.5 ) / 0.05;
+				const int r    = std::clamp( static_cast< int >( std::floor( x ) ), 0, 109 );
+				const double t = std::clamp( x - r, 0.0, 1.0 );
+				for( int j = 0; j < 15; ++j )
+				{
+					const double lo = table.weights[ ( static_cast< size_t >( r ) * 15 + static_cast< size_t >( j ) ) * 3 + static_cast< size_t >( c ) ];
+					const double hi = table.weights[ ( static_cast< size_t >( r + 1 ) * 15 + static_cast< size_t >( j ) ) * 3 + static_cast< size_t >( c ) ];
+					wv[ static_cast< size_t >( j ) ] = lo + t * ( hi - lo );
+				}
+				return wv;
+			};
+			const int reach = std::max( w, h );
+			std::vector< double > mixL[ 3 ], mixB[ 3 ];
+			for( int c = 0; c < 3; ++c )
+			{
+				const auto wl = weightsAt( pr.d, c ), wb = weightsAt( dBack, c );
+				mixL[ c ].assign( static_cast< size_t >( 2 * reach + 1 ), 0.0 );
+				mixB[ c ].assign( static_cast< size_t >( 2 * reach + 1 ), 0.0 );
+				for( int j = 0; j < 15; ++j )
+				{
+					const std::vector< double >& k = kernels[ static_cast< size_t >( j ) ];
+					const int R                    = static_cast< int >( k.size() / 2 );
+					for( int i = std::max( -R, -reach ); i <= std::min( R, reach ); ++i )
+					{
+						mixL[ c ][ static_cast< size_t >( i + reach ) ] += wl[ static_cast< size_t >( j ) ] * k[ static_cast< size_t >( i + R ) ];
+						mixB[ c ][ static_cast< size_t >( i + reach ) ] += wb[ static_cast< size_t >( j ) ] * k[ static_cast< size_t >( i + R ) ];
+					}
+				}
+			}
+
 			std::vector< int > phases;
 			if( lines[ li ] == 0.8 )
 				for( int p = 0; p < 64; ++p )
@@ -928,7 +1021,7 @@ int runBlur( const Perturb& perturb )
 			else
 				phases = { 0, 7, 13, 22, 31, 40, 51, 63 };
 
-			double worstL1 = 0.0, worstM2 = 0.0, worstM2Rel = 0.0, worstM2TolRel = 0.0, l1Range[ 2 ] = { 1e9, 0.0 }, sigRange[ 2 ] = { 1e9, 0.0 };
+			double worstL1 = 0.0, worstM2 = 0.0, worstM2Rel = 0.0, worstM2TolRel = 0.0, worstMix = 0.0, l1Range[ 2 ] = { 1e9, 0.0 }, sigRange[ 2 ] = { 1e9, 0.0 };
 			LineMeasure first {}, firstY {};
 			//Orientation 0: a column, measured along x (every phase above).
 			//Orientation 1: a row, measured along y (the eight phases): the
@@ -964,15 +1057,18 @@ int runBlur( const Perturb& perturb )
 					{
 						const double al = std::exp( -mat.k[ c ] * pr.d ), ab = std::exp( -mat.k[ c ] * dBack );
 						double l1 = 0.0, m2 = 0.0, m2w = 0.0, round1 = 0.0, round2 = 0.0, disc = 0.0, discB = 0.0, outside = 0.0;
+						double l1Mix = 0.0, outsideMix = 0.0;
 						double e0 = 0.0, e0w = 0.0;
 						for( int x = 0; x < n; ++x )
 						{
 							const double dx = x - x0;
 							const double ps = pitch * pr.lsf[ static_cast< size_t >( c ) ]( dx * pitch );
 							const double pb = pitch * back.lsf[ static_cast< size_t >( c ) ]( dx * pitch );
+							const size_t mi = static_cast< size_t >( x - x0 + reach );
 							if( x < lo || x >= hi )
 							{
 								outside += al * ps + ab * pb;
+								outsideMix += al * mixL[ c ][ mi ] + ab * mixB[ c ][ mi ];
 								continue;
 							}
 							double excess = 0.0, sumL = 0.0, sumB = 0.0;
@@ -1001,6 +1097,7 @@ int runBlur( const Perturb& perturb )
 								}
 							const double want = al * ps - ab * pb;
 							l1 += std::fabs( excess - want );
+							l1Mix += std::fabs( excess - ( al * mixL[ c ][ mi ] - ab * mixB[ c ][ mi ] ) );
 							m2 += dx * dx * excess;
 							m2w += dx * dx * want;
 							e0 += excess;
@@ -1013,6 +1110,12 @@ int runBlur( const Perturb& perturb )
 						const double Vl = hp::axisVariance( hp::chan( 0, c ), pr.d ) / ( pitch * pitch );
 						const double Vb = hp::axisVariance( hp::chan( 0, c ), dBack ) / ( pitch * pitch );
 						lm.l1[ c ]    = l1;
+						//The decimated scales' spline bound (the whole weight, to
+						//be safe), the scales the plan drops under 1e-5 of weight
+						//(15 of them at most, each counted twice), rounding, and
+						//what falls outside the window.
+						lm.l1Mix[ c ]    = l1Mix;
+						lm.l1MixTol[ c ] = ( al + ab ) * ( splineL1 + 2.0 * 15.0 * 1e-5 ) + round1 + outsideMix;
 						lm.l1Tol[ c ] = al * ( fitL1 + tableL1 + splineL1 + disc ) + ab * ( fitL1 + tableL1 + splineL1 + discB ) + round1 + outside;
 						lm.m2[ c ]     = m2;
 						lm.m2Want[ c ] = m2w;
@@ -1022,6 +1125,7 @@ int runBlur( const Perturb& perturb )
 						lm.sigmaPx[ c ]     = std::sqrt( std::max( m2 / std::max( e0, 1e-30 ), 0.0 ) );
 						lm.sigmaWantPx[ c ] = std::sqrt( std::max( m2w / std::max( e0w, 1e-30 ), 0.0 ) );
 						worstL1         = worse( worstL1, lm.l1[ c ] / lm.l1Tol[ c ] );
+						worstMix        = worse( worstMix, lm.l1Mix[ c ] / lm.l1MixTol[ c ] );
 						worstM2         = worse( worstM2, std::fabs( lm.m2[ c ] - lm.m2Want[ c ] ) / lm.m2Tol[ c ] );
 						worstM2Rel      = worse( worstM2Rel, std::fabs( lm.m2[ c ] - lm.m2Want[ c ] ) / std::fabs( lm.m2Want[ c ] ) );
 						worstM2TolRel   = std::max( worstM2TolRel, lm.m2Tol[ c ] / std::fabs( lm.m2Want[ c ] ) );
@@ -1037,25 +1141,26 @@ int runBlur( const Perturb& perturb )
 			for( int c = 0; c < 3; ++c )
 				sigmaAt[ li ][ c ] = first.sigmaPx[ c ] * pitch;
 			const double al = std::exp( -mat.k[ 1 ] * pr.d );
-			Check( worstL1 <= 1.0 && worstM2 <= 1.0,
-			       fmt( "%4dx%-4d d_l %.3f mm, %zu phases along x and 8 along y, factors to %d: green L1 %.4f (%.4f of a: tolerance %.4f of a), its spread "
+			Check( worstL1 <= 1.0 && worstM2 <= 1.0 && worstMix <= 1.0,
+			       fmt( "%4dx%-4d d_l %.3f mm, %zu phases along x and 8 along y, %zu groups, factors to %d: green L1 %.4f (%.4f of a: tolerance %.4f of a), its spread "
 			            "over the phases %.4f .. %.4f; R/G/B blur radius of the excess %.3f / %.3f / %.3f mm along x, %.3f / %.3f / %.3f along y (predicted "
 			            "%.3f / %.3f / %.3f; the line's own multipole spread %.3f / %.3f / %.3f), green over the phases %.3f .. %.3f px; worst error/tolerance: "
 			            "L1 %.3f, second moment %.3f; the second moment off by %.1e relative at worst (tolerance up to %.2f relative: the encode and the float "
-			            "sums, bounded pixel by pixel over the window, weighted by distance squared)",
-			            w, h, pr.d, phases.size(), widestFactor( plan ), first.l1[ 1 ], first.l1[ 1 ] / al, first.l1Tol[ 1 ] / al, l1Range[ 0 ], l1Range[ 1 ],
+			            "sums, bounded pixel by pixel over the window, weighted by distance squared); against the plugin's own mixture green L1 %.6f of a "
+			            "(tolerance %.6f of a: the B-spline bound, the dropped scales, rounding), worst error/tolerance %.3f",
+			            w, h, pr.d, phases.size(), plan.groups.size(), widestFactor( plan ), first.l1[ 1 ], first.l1[ 1 ] / al, first.l1Tol[ 1 ] / al, l1Range[ 0 ], l1Range[ 1 ],
 			            sigmaAt[ li ][ 0 ], sigmaAt[ li ][ 1 ], sigmaAt[ li ][ 2 ], firstY.sigmaPx[ 0 ] * pitch, firstY.sigmaPx[ 1 ] * pitch,
 			            firstY.sigmaPx[ 2 ] * pitch, first.sigmaWantPx[ 0 ] * pitch, first.sigmaWantPx[ 1 ] * pitch, first.sigmaWantPx[ 2 ] * pitch,
 			            std::sqrt( hp::axisVariance( hp::chan( 0, 0 ), pr.d ) ),
 			            std::sqrt( hp::axisVariance( hp::chan( 0, 1 ), pr.d ) ), std::sqrt( hp::axisVariance( hp::chan( 0, 2 ), pr.d ) ), sigRange[ 0 ],
-			            sigRange[ 1 ], worstL1, worstM2, worstM2Rel, worstM2TolRel ) );
+			            sigRange[ 1 ], worstL1, worstM2, worstM2Rel, worstM2TolRel, first.l1Mix[ 1 ] / al, first.l1MixTol[ 1 ] / al, worstMix ) );
 		}
 		bool grows = true;
 		for( int c = 0; c < 3; ++c )
 			for( size_t li = 0; li + 1 < preds.size(); ++li )
 				grows = grows && sigmaAt[ li + 1 ][ c ] > sigmaAt[ li ][ c ];
-		Check( grows, fmt( "%4dx%-4d the measured blur radius grows with thickness in every channel: green %.3f < %.3f < %.3f < %.3f mm", w, h,
-		                   sigmaAt[ 0 ][ 1 ], sigmaAt[ 1 ][ 1 ], sigmaAt[ 2 ][ 1 ], sigmaAt[ 3 ][ 1 ] ) );
+		Check( grows, fmt( "%4dx%-4d the measured blur radius grows with thickness in every channel: green %.3f < %.3f < %.3f < %.3f < %.3f mm", w, h,
+		                   sigmaAt[ 0 ][ 1 ], sigmaAt[ 1 ][ 1 ], sigmaAt[ 2 ][ 1 ], sigmaAt[ 3 ][ 1 ], sigmaAt[ 4 ][ 1 ] ) );
 	}
 	return Verdict();
 }
