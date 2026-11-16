@@ -54,7 +54,8 @@ reconstruction (`Shaders.cpp`: spread, pass, `level()`), the intermediates' form
   - **Back light**: `--attenuation` (flat cards of eight codes: ln(out) against d is a line of
     slope −k per channel, every material, both mappings), `--blur` (a one-pixel column and row
     against the multipole's line spread: L1 and second moment, at many phases; the radius
-    grows with thickness).
+    grows with thickness; then against the plugin's own mixture, the tight measure of the
+    passes; a line midway between table rows).
   - **Front light**: `--front` (no clip colour; Lambert's ratio along x and along y; facing the
     lamp, no shading; thin against thick by Kubelka–Munk).
   - **Host**: `--edges` (flat to the frame's edges; one-sided slopes there), `--alpha`,
