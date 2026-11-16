@@ -40,8 +40,8 @@ p99 must be 1.0), and fails if the binary's default is not 1 / the median.
 
 The rule was first written on luminance. Measured, that reading cannot be met
 out of the picture: the plate is warm, so red reaches the top code first, and
-at 1 / (the median p99 luminance at Back Light 1) = 8.83 the median clip's
-p99 output luminance is 0.953, not 1, because red has clipped. Luminance 1.0
+at 1 / (the median p99 luminance at Back Light 1) = 8.8171 the median
+clip's p99 output luminance is 0.9527, not 1, because red has clipped. Luminance 1.0
 needs blue at the top code too, which burns the picture. So the rule is the
 brightest channel's.
 """

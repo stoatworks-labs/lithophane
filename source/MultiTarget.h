@@ -8,7 +8,7 @@ namespace lithophane
     A framebuffer with one to four colour textures, drawn into at once
     (multiple render targets): one per Gaussian scale of a group.
 
-    Every texture is RGBA16F (SPEC-lithophane.md, The chain) unless asked,
+    Every texture is RGBA32F (SPEC-lithophane.md, The chain) unless asked,
     nearest, clamp to edge, and read texel for texel. It reallocates only
     when the size, the count or the format changes, and clears what it
     allocates, as PassBuffer does.
@@ -18,7 +18,7 @@ class MultiTarget
 public:
 	static constexpr int kMaxTargets = 4;
 
-	bool Ensure( int width, int height, int count, GLint format = GL_RGBA16F );
+	bool Ensure( int width, int height, int count, GLint format = GL_RGBA32F );
 	void Destroy();
 	void Clear();
 

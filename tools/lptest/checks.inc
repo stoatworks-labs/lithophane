@@ -11,15 +11,18 @@
 //===========================================================================
 // Error sources, each named once. Every tolerance below is a sum of these.
 //===========================================================================
-/// A half float rounds to nearest with an 11-bit significand: relative 2^-11.
-constexpr double kHalf = 1.0 / 2048.0;
-/// The deepest chain of half-float roundings a value meets: spread, the
-/// decimation along y, the Gaussian along x, the group's sum (Shaders.h).
-constexpr int kHalfRoundings = 4;
-/// Below 2^-14 a half float is subnormal: half its step, 2^-25, absolute.
-constexpr double kSubnormal = 1.0 / 33554432.0;
 /// One float rounding.
 constexpr double kFloat = 1.0 / 16777216.0;
+/// The intermediates are RGBA32F: a value stored rounds to nearest, relative
+/// 2^-24. (They were RGBA16F, relative 2^-11: the half floats' rounding of the
+/// 6 mm background put the line's second moment 9% off -- 21.7 against 23.8
+/// px^2 at 1280x720 -- inside a tolerance that had to allow it.)
+constexpr double kStore = 1.0 / 16777216.0;
+/// The deepest chain of stored roundings a value meets: spread, the
+/// decimation along y, the Gaussian along x, the group's sum (Shaders.h).
+constexpr int kStoreRoundings = 4;
+/// A float under 2^-126 may be flushed to zero by the GPU: 2^-126 absolute.
+constexpr double kFlush = 1.1754943508222875e-38;
 /// The sRGB encode in the shader (GPU float pow: exp2 of p log2 x, a few ulp
 /// of a log2 near 10 amplified by p = 1/2.4) and the harness's decode in
 /// double: 3e-6 relative at the darkest code used, so 2^-17 with a factor of
@@ -804,8 +807,8 @@ int runAttenuation( const Perturb& perturb )
 						const double want = std::exp( -mat.k[ c ] * d[ i ] );
 						//The recoded clip moves d by its luma's error times the span.
 						const double dd = kRecode * ( thick - thin ) + 2.0 * ulpOf( d[ i ] );
-						tol[ i ][ c ]   = kHalfRoundings * kHalf + kEncode + accumulation( plan ) + mat.k[ c ] * dd + 4.0 * kFloat
-						                + groups * kHalfRoundings * kSubnormal / want;
+						tol[ i ][ c ]   = kStoreRoundings * kStore + kEncode + accumulation( plan ) + mat.k[ c ] * dd + 4.0 * kFloat
+						                + groups * kStoreRoundings * kFlush / want;
 						worstResidual   = worse( worstResidual, std::fabs( std::log( y[ i ][ c ] / want ) ) / tol[ i ][ c ] );
 					}
 					order = order && y[ i ][ 0 ] > y[ i ][ 1 ] && y[ i ][ 1 ] > y[ i ][ 2 ];
@@ -847,9 +850,9 @@ int runAttenuation( const Perturb& perturb )
 				             mat.name, -slope[ 0 ], -slope[ 1 ], -slope[ 2 ], mat.k[ 0 ], mat.k[ 1 ], mat.k[ 2 ], worstResidual, slopeWorst,
 				             mapping == 1 ? fmt( ", green against Cura's luminance %.3f", lightWorst ).c_str() : "", order ? "yes" : "NO" );
 			}
-			Check( ok, fmt( "%4dx%-4d %s (tolerance per point: %d half-float roundings of 2^-11, the encode 2^-17, the float sums, the recode's "
-			                "thickness, and the subnormal step against the value):",
-			                w, h, mapping == 0 ? "Linear Depth" : "Linear Light", kHalfRoundings )
+			Check( ok, fmt( "%4dx%-4d %s (tolerance per point: %d float roundings of 2^-24 stored, the encode 2^-17, the float sums, the recode's "
+			                "thickness, and the flush to zero against the value):",
+			                w, h, mapping == 0 ? "Linear Depth" : "Linear Light", kStoreRoundings )
 			               + line );
 		}
 	}
@@ -863,14 +866,15 @@ int runAttenuation( const Perturb& perturb )
 /// light, row-averaged; and its measures against the prediction.
 struct LineMeasure
 {
-	double l1[ 3 ], l1Tol[ 3 ], m2[ 3 ], m2Want[ 3 ], m2Tol[ 3 ], sigmaPx[ 3 ];
+	double l1[ 3 ], l1Tol[ 3 ], m2[ 3 ], m2Want[ 3 ], m2Tol[ 3 ], sigmaPx[ 3 ], sigmaWantPx[ 3 ];
 };
 
 int runBlur( const Perturb& perturb )
 {
 	std::printf( "\n=== blur: a one-pixel white line (Thinnest d_l = 0.6, 0.8, 1.5, 3 mm) on black (Thickest 6 mm), Porcelain, minus the blank card:\n"
 	             "    the excess against the column model's a(d_l) LSF(d_l) - a(6) LSF(6), the LSFs by quadrature of the multipole; its second moment\n"
-	             "    (the blur radius, growing with d) and its L1 distance; the line at every phase 0..63 at 0.8 mm and at eight phases otherwise\n" );
+	             "    (the blur radius, growing with d) and its L1 distance; a column at every phase 0..63 at 0.8 mm and at eight phases otherwise, a row\n"
+	             "    at eight phases, measured along y\n" );
 	const double lines[] = { 0.6, 0.8, 1.5, 3.0 };
 	//The predictions are physical: computed once, in mm, for every raster.
 	struct Pred
@@ -915,7 +919,7 @@ int runBlur( const Perturb& perturb )
 				return 1;
 			const Floats ob = rb.Output();
 			const plate::Plan plan = rb.plugin.LastPlan();
-			const double eps       = kHalfRoundings * kHalf + kEncode + accumulation( plan );
+			const double eps       = kStoreRoundings * kStore + kEncode + accumulation( plan );
 
 			std::vector< int > phases;
 			if( lines[ li ] == 0.8 )
@@ -924,105 +928,127 @@ int runBlur( const Perturb& perturb )
 			else
 				phases = { 0, 7, 13, 22, 31, 40, 51, 63 };
 
-			double worstL1 = 0.0, worstM2 = 0.0, l1Range[ 2 ] = { 1e9, 0.0 }, sigRange[ 2 ] = { 1e9, 0.0 };
-			LineMeasure first {};
-			for( const int phase : phases )
+			double worstL1 = 0.0, worstM2 = 0.0, worstM2Rel = 0.0, worstM2TolRel = 0.0, l1Range[ 2 ] = { 1e9, 0.0 }, sigRange[ 2 ] = { 1e9, 0.0 };
+			LineMeasure first {}, firstY {};
+			//Orientation 0: a column, measured along x (every phase above).
+			//Orientation 1: a row, measured along y (the eight phases): the
+			//passes along y are as much the plugin as those along x.
+			for( int orient = 0; orient < 2; ++orient )
 			{
-				const int x0 = w / 2 - 32 + phase;
-				Floats card  = blank;
-				for( int y = 0; y < h; ++y )
-					for( int c = 0; c < 3; ++c )
-						card[ ( static_cast< size_t >( y ) * w + x0 ) * 4 + c ] = 1.0f;
-				Rig rl;
-				if( !startRig( rl, w, h, perturb, &card ) )
-					return 1;
-				rl.Set( PT_THINNEST, pThin( lines[ li ] ) );
-				rl.Set( PT_THICKEST, pThick( 6.0 ) );
-				if( !rl.Render( 1 ) )
-					return 1;
-				const Floats ol = rl.Output();
-				LineMeasure lm {};
-				//The window: the whole frame but 80 px at each side.
-				const int lo = 80, hi = w - 80;
-				for( int c = 0; c < 3; ++c )
+				const std::vector< int > usePhases = orient == 0 ? phases : std::vector< int > { 0, 7, 13, 22, 31, 40, 51, 63 };
+				const int n = orient == 0 ? w : h, m = orient == 0 ? h : w;
+				//The window: the whole frame but 80 px at each end (an eighth of
+				//the height at most along y, so 320x180 keeps a window).
+				const int margin = orient == 0 ? 80 : std::min( 80, h / 8 );
+				for( const int phase : usePhases )
 				{
-					const double al = std::exp( -mat.k[ c ] * pr.d ), ab = std::exp( -mat.k[ c ] * dBack );
-					double l1 = 0.0, m2 = 0.0, m2w = 0.0, round1 = 0.0, round2 = 0.0, disc = 0.0, discB = 0.0, outside = 0.0;
-					double e0 = 0.0;
-					for( int x = 0; x < w; ++x )
+					const int x0 = n / 2 - 32 + phase;
+					Floats card  = blank;
+					for( int u = 0; u < m; ++u )
+						for( int c = 0; c < 3; ++c )
+						{
+							const int px = orient == 0 ? x0 : u, py = orient == 0 ? u : x0;
+							card[ ( static_cast< size_t >( py ) * w + px ) * 4 + c ] = 1.0f;
+						}
+					Rig rl;
+					if( !startRig( rl, w, h, perturb, &card ) )
+						return 1;
+					rl.Set( PT_THINNEST, pThin( lines[ li ] ) );
+					rl.Set( PT_THICKEST, pThick( 6.0 ) );
+					if( !rl.Render( 1 ) )
+						return 1;
+					const Floats ol = rl.Output();
+					LineMeasure lm {};
+					const int lo = margin, hi = n - margin;
+					for( int c = 0; c < 3; ++c )
 					{
-						const double dx = x - x0;
-						const double ps = pitch * pr.lsf[ static_cast< size_t >( c ) ]( dx * pitch );
-						const double pb = pitch * back.lsf[ static_cast< size_t >( c ) ]( dx * pitch );
-						if( x < lo || x >= hi )
+						const double al = std::exp( -mat.k[ c ] * pr.d ), ab = std::exp( -mat.k[ c ] * dBack );
+						double l1 = 0.0, m2 = 0.0, m2w = 0.0, round1 = 0.0, round2 = 0.0, disc = 0.0, discB = 0.0, outside = 0.0;
+						double e0 = 0.0, e0w = 0.0;
+						for( int x = 0; x < n; ++x )
 						{
-							outside += al * ps + ab * pb;
-							continue;
-						}
-						double excess = 0.0, sumL = 0.0, sumB = 0.0;
-						for( int y = 0; y < h; ++y )
-						{
-							const double vl = linAt( ol, w, x, y, c ), vb = linAt( ob, w, x, y, c );
-							excess += vl - vb;
-							sumL += vl;
-							sumB += vb;
-						}
-						excess /= h;
-						sumL /= h;
-						sumB /= h;
-						//The pixel-averaged LSF (the line a pixel wide, seen a
-						//pixel wide: the LSF through a unit tent of half-width 1 px).
-						static const hp::Gauss g16( 16 );
-						double pa = 0.0, pab = 0.0;
-						for( int side = 0; side < 2; ++side )
-							for( size_t i = 0; i < g16.x.size(); ++i )
+							const double dx = x - x0;
+							const double ps = pitch * pr.lsf[ static_cast< size_t >( c ) ]( dx * pitch );
+							const double pb = pitch * back.lsf[ static_cast< size_t >( c ) ]( dx * pitch );
+							if( x < lo || x >= hi )
 							{
-								const double tau = side == 0 ? 0.5 * ( g16.x[ i ] - 1.0 ) : 0.5 * ( g16.x[ i ] + 1.0 );
-								const double wt  = 0.5 * g16.w[ i ] * ( 1.0 - std::fabs( tau ) );
-								pa += wt * pitch * pr.lsf[ static_cast< size_t >( c ) ]( ( dx - tau ) * pitch );
-								pab += wt * pitch * back.lsf[ static_cast< size_t >( c ) ]( ( dx - tau ) * pitch );
+								outside += al * ps + ab * pb;
+								continue;
 							}
-						const double want = al * ps - ab * pb;
-						l1 += std::fabs( excess - want );
-						m2 += dx * dx * excess;
-						m2w += dx * dx * want;
-						e0 += excess;
-						round1 += eps * ( sumL + sumB );
-						round2 += eps * dx * dx * ( sumL + sumB );
-						disc += std::fabs( ps - pa );
-						discB += std::fabs( pb - pab );
+							double excess = 0.0, sumL = 0.0, sumB = 0.0;
+							for( int u = 0; u < m; ++u )
+							{
+								const int px = orient == 0 ? x : u, py = orient == 0 ? u : x;
+								const double vl = linAt( ol, w, px, py, c ), vb = linAt( ob, w, px, py, c );
+								excess += vl - vb;
+								sumL += vl;
+								sumB += vb;
+							}
+							excess /= m;
+							sumL /= m;
+							sumB /= m;
+							//The pixel-averaged LSF (the line a pixel wide, seen a
+							//pixel wide: the LSF through a unit tent of half-width 1 px).
+							static const hp::Gauss g16( 16 );
+							double pa = 0.0, pab = 0.0;
+							for( int side = 0; side < 2; ++side )
+								for( size_t i = 0; i < g16.x.size(); ++i )
+								{
+									const double tau = side == 0 ? 0.5 * ( g16.x[ i ] - 1.0 ) : 0.5 * ( g16.x[ i ] + 1.0 );
+									const double wt  = 0.5 * g16.w[ i ] * ( 1.0 - std::fabs( tau ) );
+									pa += wt * pitch * pr.lsf[ static_cast< size_t >( c ) ]( ( dx - tau ) * pitch );
+									pab += wt * pitch * back.lsf[ static_cast< size_t >( c ) ]( ( dx - tau ) * pitch );
+								}
+							const double want = al * ps - ab * pb;
+							l1 += std::fabs( excess - want );
+							m2 += dx * dx * excess;
+							m2w += dx * dx * want;
+							e0 += excess;
+							e0w += want;
+							round1 += eps * ( sumL + sumB );
+							round2 += eps * dx * dx * ( sumL + sumB );
+							disc += std::fabs( ps - pa );
+							discB += std::fabs( pb - pab );
+						}
+						const double Vl = hp::axisVariance( hp::chan( 0, c ), pr.d ) / ( pitch * pitch );
+						const double Vb = hp::axisVariance( hp::chan( 0, c ), dBack ) / ( pitch * pitch );
+						lm.l1[ c ]    = l1;
+						lm.l1Tol[ c ] = al * ( fitL1 + tableL1 + splineL1 + disc ) + ab * ( fitL1 + tableL1 + splineL1 + discB ) + round1 + outside;
+						lm.m2[ c ]     = m2;
+						lm.m2Want[ c ] = m2w;
+						//The fit's variance bound (verified in --model), a sixth of
+						//a pixel squared each for sampled against averaged, rounding.
+						lm.m2Tol[ c ] = al * ( kFitVariance * Vl + 1.0 / 6.0 ) + ab * ( kFitVariance * Vb + 1.0 / 6.0 ) + round2;
+						lm.sigmaPx[ c ]     = std::sqrt( std::max( m2 / std::max( e0, 1e-30 ), 0.0 ) );
+						lm.sigmaWantPx[ c ] = std::sqrt( std::max( m2w / std::max( e0w, 1e-30 ), 0.0 ) );
+						worstL1         = worse( worstL1, lm.l1[ c ] / lm.l1Tol[ c ] );
+						worstM2         = worse( worstM2, std::fabs( lm.m2[ c ] - lm.m2Want[ c ] ) / lm.m2Tol[ c ] );
+						worstM2Rel      = worse( worstM2Rel, std::fabs( lm.m2[ c ] - lm.m2Want[ c ] ) / std::fabs( lm.m2Want[ c ] ) );
+						worstM2TolRel   = std::max( worstM2TolRel, lm.m2Tol[ c ] / std::fabs( lm.m2Want[ c ] ) );
 					}
-					const double Vl = hp::axisVariance( hp::chan( 0, c ), pr.d ) / ( pitch * pitch );
-					const double Vb = hp::axisVariance( hp::chan( 0, c ), dBack ) / ( pitch * pitch );
-					lm.l1[ c ]    = l1;
-					lm.l1Tol[ c ] = al * ( fitL1 + tableL1 + splineL1 + disc ) + ab * ( fitL1 + tableL1 + splineL1 + discB ) + round1 + outside;
-					lm.m2[ c ]     = m2;
-					lm.m2Want[ c ] = m2w;
-					//The fit's variance bound (verified in --model), a sixth of
-					//a pixel squared each for sampled against averaged, rounding.
-					lm.m2Tol[ c ] = al * ( kFitVariance * Vl + 1.0 / 6.0 ) + ab * ( kFitVariance * Vb + 1.0 / 6.0 ) + round2;
-					lm.sigmaPx[ c ] = std::sqrt( std::max( m2 / std::max( e0, 1e-30 ), 0.0 ) );
-					worstL1         = worse( worstL1, lm.l1[ c ] / lm.l1Tol[ c ] );
-					worstM2         = worse( worstM2, std::fabs( lm.m2[ c ] - lm.m2Want[ c ] ) / lm.m2Tol[ c ] );
+					if( phase == usePhases.front() )
+						( orient == 0 ? first : firstY ) = lm;
+					l1Range[ 0 ]  = std::min( l1Range[ 0 ], lm.l1[ 1 ] );
+					l1Range[ 1 ]  = std::max( l1Range[ 1 ], lm.l1[ 1 ] );
+					sigRange[ 0 ] = std::min( sigRange[ 0 ], lm.sigmaPx[ 1 ] );
+					sigRange[ 1 ] = std::max( sigRange[ 1 ], lm.sigmaPx[ 1 ] );
 				}
-				if( phase == phases.front() )
-					first = lm;
-				l1Range[ 0 ]  = std::min( l1Range[ 0 ], lm.l1[ 1 ] );
-				l1Range[ 1 ]  = std::max( l1Range[ 1 ], lm.l1[ 1 ] );
-				sigRange[ 0 ] = std::min( sigRange[ 0 ], lm.sigmaPx[ 1 ] );
-				sigRange[ 1 ] = std::max( sigRange[ 1 ], lm.sigmaPx[ 1 ] );
 			}
 			for( int c = 0; c < 3; ++c )
 				sigmaAt[ li ][ c ] = first.sigmaPx[ c ] * pitch;
 			const double al = std::exp( -mat.k[ 1 ] * pr.d );
 			Check( worstL1 <= 1.0 && worstM2 <= 1.0,
-			       fmt( "%4dx%-4d d_l %.3f mm, %zu phases, factors to %d: green L1 %.4f (%.4f of a: tolerance %.4f of a), its spread over the phases "
-			            "%.4f .. %.4f; R/G/B blur radius %.3f / %.3f / %.3f mm (multipole %.3f / %.3f / %.3f), green over the phases %.3f .. %.3f px; "
-			            "worst error/tolerance: L1 %.3f, second moment %.3f",
+			       fmt( "%4dx%-4d d_l %.3f mm, %zu phases along x and 8 along y, factors to %d: green L1 %.4f (%.4f of a: tolerance %.4f of a), its spread "
+			            "over the phases %.4f .. %.4f; R/G/B blur radius of the excess %.3f / %.3f / %.3f mm along x, %.3f / %.3f / %.3f along y (predicted "
+			            "%.3f / %.3f / %.3f; the line's own multipole spread %.3f / %.3f / %.3f), green over the phases %.3f .. %.3f px; worst error/tolerance: "
+			            "L1 %.3f, second moment %.3f; the second moment off by %.1e relative at worst (tolerance up to %.2f relative: the encode and the float "
+			            "sums, bounded pixel by pixel over the window, weighted by distance squared)",
 			            w, h, pr.d, phases.size(), widestFactor( plan ), first.l1[ 1 ], first.l1[ 1 ] / al, first.l1Tol[ 1 ] / al, l1Range[ 0 ], l1Range[ 1 ],
-			            sigmaAt[ li ][ 0 ], sigmaAt[ li ][ 1 ], sigmaAt[ li ][ 2 ], std::sqrt( hp::axisVariance( hp::chan( 0, 0 ), pr.d ) ),
+			            sigmaAt[ li ][ 0 ], sigmaAt[ li ][ 1 ], sigmaAt[ li ][ 2 ], firstY.sigmaPx[ 0 ] * pitch, firstY.sigmaPx[ 1 ] * pitch,
+			            firstY.sigmaPx[ 2 ] * pitch, first.sigmaWantPx[ 0 ] * pitch, first.sigmaWantPx[ 1 ] * pitch, first.sigmaWantPx[ 2 ] * pitch,
+			            std::sqrt( hp::axisVariance( hp::chan( 0, 0 ), pr.d ) ),
 			            std::sqrt( hp::axisVariance( hp::chan( 0, 1 ), pr.d ) ), std::sqrt( hp::axisVariance( hp::chan( 0, 2 ), pr.d ) ), sigRange[ 0 ],
-			            sigRange[ 1 ], worstL1, worstM2 ) );
+			            sigRange[ 1 ], worstL1, worstM2, worstM2Rel, worstM2TolRel ) );
 		}
 		bool grows = true;
 		for( int c = 0; c < 3; ++c )
@@ -1219,7 +1245,7 @@ int runEdges( const Perturb& perturb )
 			if( !r.Render( 1 ) )
 				return 1;
 			const Floats out = r.Output();
-			const double tol = kHalfRoundings * kHalf + kEncode + accumulation( r.plugin.LastPlan() );
+			const double tol = kStoreRoundings * kStore + kEncode + accumulation( r.plugin.LastPlan() );
 			double worst     = 0.0;
 			for( int c = 0; c < 3; ++c )
 			{
@@ -1229,7 +1255,7 @@ int runEdges( const Perturb& perturb )
 						worst = worse( worst, std::fabs( linAt( out, w, x, y, c ) - ref ) / ref );
 			}
 			Check( worst <= tol, fmt( "%4dx%-4d Plate Width %3.0f mm (factors to %d): worst departure from the centre %.2e relative (tolerance %.2e: the "
-			                          "half-float roundings, the encode, the float sums)",
+			                          "stored roundings, the encode, the float sums)",
 			                          w, h, plateWidth, widestFactor( r.plugin.LastPlan() ), worst, tol ) );
 		}
 	}
