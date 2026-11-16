@@ -287,11 +287,11 @@ double hPlate( float v )
 }
 float pBack( double level )
 {
-	return static_cast< float >( level / 8.0 );
+	return static_cast< float >( level / 16.0 );
 }
 double hBack( float v )
 {
-	return 8.0 * static_cast< double >( v );
+	return 16.0 * static_cast< double >( v );
 }
 float pFront( double level )
 {

@@ -59,8 +59,13 @@ static_assert( sizeof( kTable ) / sizeof( kTable[ 0 ] ) == PT_ABOUT_TEXT, "every
 
 const char* const kMaterialNames[ kMaterialCount ] = { "Porcelain", "Feldspar Porcelain", "Clay Porcelain", "White PLA" };
 
-//Set from the demo clips: tools/clips.py defaults.
-const double kDefaultBackLight = 2.0;
+//Set from the demo clips (tools/clips.py defaults, 2026-11-16): at the default
+//plate and Back Light 1 the median of the 33 clips' 99th-percentile brightest
+//output channel is 0.138428, so the brightest 1% of the median clip reaches
+//the top code at 1 / 0.138428 = 7.2240 (SPEC-lithophane.md's rule). The range
+//is 0 .. 16 so that every demo clip's own value (the darkest's is 14.9) is in
+//reach.
+const double kDefaultBackLight = 7.2240;
 
 const ControlInfo& InfoOf( unsigned int id )
 {

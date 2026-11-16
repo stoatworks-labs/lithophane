@@ -92,7 +92,7 @@ extern const char* const kMaterialNames[ kMaterialCount ];
 constexpr double kThinnestLow = 0.5, kThinnestHigh = 3.0;     ///< mm
 constexpr double kThickestLow = 0.5, kThickestHigh = 6.0;     ///< mm
 constexpr double kPlateWidthLow = 20.0, kPlateWidthHigh = 400.0;///< mm
-constexpr double kBackLightHigh  = 8.0;
+constexpr double kBackLightHigh  = 16.0;
 constexpr double kFrontLightHigh = 2.0;
 constexpr double kAngleHigh      = 360.0;///< degrees
 constexpr double kElevationLow = 5.0, kElevationHigh = 90.0;  ///< degrees

@@ -199,6 +199,8 @@ CGLContextObj createContext()
 	if( error != kCGLNoError )
 		return nullptr;
 	CGLSetCurrentContext( context );
+	if( g_software )
+		std::fprintf( stderr, "lptest: GL_RENDERER %s\n", reinterpret_cast< const char* >( glGetString( GL_RENDERER ) ) );
 	return context;
 }
 
@@ -530,6 +532,15 @@ std::vector< double > luminanceOf( const Floats& out )
 		y[ p ] = 0.2126 * linearOf( out[ 4 * p ] ) + 0.7152 * linearOf( out[ 4 * p + 1 ] ) + 0.0722 * linearOf( out[ 4 * p + 2 ] );
 	return y;
 }
+/// The output's brightest channel, linear, per pixel: 1 where any channel
+/// has reached the top code.
+std::vector< double > brightestOf( const Floats& out )
+{
+	std::vector< double > y( out.size() / 4 );
+	for( size_t p = 0; p < y.size(); ++p )
+		y[ p ] = std::max( { linearOf( out[ 4 * p ] ), linearOf( out[ 4 * p + 1 ] ), linearOf( out[ 4 * p + 2 ] ) } );
+	return y;
+}
 
 size_t differing( const Floats& a, const Floats& b )
 {
@@ -688,9 +699,10 @@ bool bindScript( LithophanePlugin& plugin, std::istream& in, const std::string& 
 // --film N renders N on the harness's card.
 //===========================================================================
 /// --stats: a line on stderr a frame -- the frame's 99th-percentile output
-/// luminance (Rec. 709, linear, from the float readback before any 8-bit
-/// rounding) -- and at the end the same over every pixel of every frame
-/// (Back Light's default rule, SPEC-lithophane.md).
+/// luminance (Rec. 709, linear) and brightest channel (linear), from the
+/// float readback before any 8-bit rounding -- and at the end the same over
+/// every pixel of every frame (the brightest channel is Back Light's default
+/// rule, SPEC-lithophane.md).
 bool g_stats = false;
 
 /// A histogram of luminance over [0, 1] in 2^20 bins, for the pooled
@@ -753,7 +765,7 @@ int runPipe( int width, int height, double fps, const std::string& scriptPath, i
 
 	Bytes in( static_cast< size_t >( width ) * height * 4 );
 	Floats picture( in.size() );
-	Percentile pooled;
+	Percentile pooled, pooledTop;
 	int index = 0;
 	for( ; readStdin || index < count; ++index )
 	{
@@ -788,13 +800,18 @@ int runPipe( int width, int height, double fps, const std::string& scriptPath, i
 		const Floats out = rig.Output();
 		if( g_stats )
 		{
-			Percentile frame;
+			Percentile frame, frameTop;
 			for( const double y : luminanceOf( out ) )
 			{
 				frame.Add( y );
 				pooled.Add( y );
 			}
-			std::fprintf( stderr, "frame %d p99 luminance %.6f\n", index, frame.At( 0.99 ) );
+			for( const double y : brightestOf( out ) )
+			{
+				frameTop.Add( y );
+				pooledTop.Add( y );
+			}
+			std::fprintf( stderr, "frame %d p99 luminance %.6f brightest channel %.6f\n", index, frame.At( 0.99 ), frameTop.At( 0.99 ) );
 		}
 		Bytes bytes( in.size() );
 		for( int y = 0; y < height; ++y )
@@ -816,7 +833,8 @@ int runPipe( int width, int height, double fps, const std::string& scriptPath, i
 		}
 	}
 	if( g_stats )
-		std::fprintf( stderr, "lptest: %d frames; p99 luminance %.6f over every pixel of every frame\n", index, pooled.At( 0.99 ) );
+		std::fprintf( stderr, "lptest: %d frames; over every pixel of every frame, p99 luminance %.6f brightest channel %.6f\n", index, pooled.At( 0.99 ),
+		              pooledTop.At( 0.99 ) );
 	else
 		std::fprintf( stderr, "lptest: %d frames\n", index );
 	return 0;
@@ -869,7 +887,7 @@ int main( int argc, char** argv )
 			             "  --pipe            raw RGBA frames in on stdin, out on stdout\n"
 			             "  --film N          N frames, raw RGBA on stdout\n"
 			             "  --script PATH     cues for --pipe/--film: 'frame Name value'\n"
-			             "  --stats           (with --pipe/--film) each frame's 99th-percentile output luminance on stderr, and at the end over all frames\n\n"
+			             "  --stats           (with --pipe/--film) each frame's 99th-percentile output luminance and brightest channel on stderr, and at the end over all frames\n\n"
 			             "  --all             every check below, at 1280x720 and 320x180 (--size: that raster alone)\n"
 			             "  --negative        each check against the wrong models it must catch\n"
 			             "  --bench           ms a frame at 720p, 1080p and 4K\n"
