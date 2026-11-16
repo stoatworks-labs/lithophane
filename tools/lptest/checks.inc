@@ -1066,8 +1066,8 @@ int runBlur( const Perturb& perturb )
 int runFront( const Perturb& perturb )
 {
 	std::printf( "\n=== front: Back Light 0, Front Light 1. Equal luma in different colours reflects the same; opposite ramps under a lamp from +x\n"
-	             "    at 30 deg shade in Lambert's ratio (sin e - s cos e)/(sin e + s cos e); facing the lamp they do not shade; thin reflects\n"
-	             "    less than thick by the Kubelka-Munk ratio\n" );
+	             "    at 30 deg shade in Lambert's ratio (sin e - s cos e)/(sin e + s cos e), and along y under a lamp from +y; facing the lamp\n"
+	             "    they do not shade; thin reflects less than thick by the Kubelka-Munk ratio\n" );
 	//Codes with 299 R + 587 G + 114 B = 128000 exactly: luma 128 in every one.
 	std::vector< std::array< int, 3 > > equal;
 	for( int r = 0; r <= 255 && equal.size() < 4; r += 1 )
@@ -1187,6 +1187,48 @@ int runFront( const Perturb& perturb )
 		}
 		Check( ratioWorst[ 0 ] <= 1.0, fmt( "%4dx%-4d (ii) facing the viewer, slope %.4f (%d code%s a pixel): up/down ratio %.6f, Lambert %.6f; worst error/tolerance %.3f",
 		                                    w, h, s, k, k == 1 ? "" : "s", ratioSeen[ 0 ], want, ratioWorst[ 0 ] ) );
+
+		//(v) the same ramps along y (GL's y, up), under a lamp from +y (Light
+		//Angle 90 deg): the normal's y and the lamp's y, which (ii) cannot see.
+		{
+			const int lenY      = std::min( len, h / 2 - 8 );
+			Floats rampsY       = flatCard( w, h, code8( 128 ), code8( 128 ), code8( 128 ) );
+			const int lowStart  = h / 4 - lenY / 2, highStart = 3 * h / 4 - lenY / 2;
+			for( int x = 0; x < w; ++x )
+				for( int i = 0; i < lenY; ++i )
+				{
+					const float up = code8( 220 - k * i ), down = code8( 220 - k * ( lenY - 1 - i ) );
+					for( int c = 0; c < 3; ++c )
+					{
+						rampsY[ ( static_cast< size_t >( lowStart + i ) * w + x ) * 4 + c ]  = up;
+						rampsY[ ( static_cast< size_t >( highStart + i ) * w + x ) * 4 + c ] = down;
+					}
+				}
+			Rig r;
+			if( !startRig( r, w, h, perturb, &rampsY ) )
+				return 1;
+			lit( r, 0 );
+			r.Set( PT_LIGHT_ANGLE, pAngle( 90.0 ) );
+			if( !r.Render( 1 ) )
+				return 1;
+			const Floats out = r.Output();
+			//The lamp at 90 deg is (cos e cos 90, cos e sin 90, sin e): its x
+			//is cos e times a float's cos( pi / 2 ), 6e-17 in double, below
+			//every term here.
+			double worstY = 0.0, seenY = 0.0;
+			for( int i = 2; i < lenY - 2; i += std::max( 1, lenY / 12 ) )
+				for( int c = 0; c < 3; ++c )
+				{
+					const double a = linAt( out, w, w / 2, lowStart + i, c ), b = linAt( out, w, w / 2, highStart + lenY - 1 - i, c );
+					const double dd    = 2.0 * ulpOf( thick ) + kRecode * span;
+					const double slope = 2.0 * std::sin( eUsed ) * std::cos( eUsed ) / std::pow( std::sin( eUsed ) + s * std::cos( eUsed ), 2.0 );
+					const double tol   = slope * dd / pitch + 2.0 * kEncode + 32.0 * kFloat;
+					worstY             = worse( worstY, std::fabs( a / b - want ) / tol );
+					seenY              = a / b;
+				}
+			Check( worstY <= 1.0, fmt( "%4dx%-4d (v) the ramps along y under a lamp at 90 deg: up/down ratio %.6f, Lambert %.6f; worst error/tolerance %.3f", w, h,
+			                           seenY, want, worstY ) );
+		}
 		Check( ratioWorst[ 1 ] <= 1.0, fmt( "%4dx%-4d (iii) facing the lamp: up/down ratio %.6f (no shading: 1); worst error/tolerance %.3f", w, h, ratioSeen[ 1 ],
 		                                    ratioWorst[ 1 ] ) );
 
@@ -1230,7 +1272,8 @@ int runFront( const Perturb& perturb )
 //===========================================================================
 int runEdges( const Perturb& perturb )
 {
-	std::printf( "\n=== edges: a flat coloured card renders flat to the frame's edges (the plate continues past the frame)\n" );
+	std::printf( "\n=== edges: a flat coloured card renders flat to the frame's edges (the plate continues past the frame); a ramp into each\n"
+	             "    edge shades under a front lamp at the edge pixel as inside (one-sided differences there)\n" );
 	for( const Raster& raster : kRasters )
 	{
 		const int w = raster.w, h = raster.h;
@@ -1258,6 +1301,80 @@ int runEdges( const Perturb& perturb )
 			                          "stored roundings, the encode, the float sums)",
 			                          w, h, plateWidth, widestFactor( r.plugin.LastPlan() ), worst, tol ) );
 		}
+
+		//A ramp running into each edge of the frame, under a front lamp along
+		//it (Back Light 0, 30 deg): the slope at the edge pixel is a one-sided
+		//difference (repousse's), the same slope as the central difference
+		//inside, so the shading there is the inside's. Measured as out / R(d)
+		//(the Kubelka-Munk factor of the pixel's own thickness divided out),
+		//the edge pixel against the ramp's fourth.
+		const double pitch = hPlate( pPlate( 100.0 ) ) / w;
+		const double thin = hThin( pThin( 0.8 ) ), thick = hThick( pThick( 3.0 ) ), span = thick - thin;
+		const int k   = std::max( 1, static_cast< int >( std::lround( 0.3 * 255.0 * pitch / span ) ) );
+		const int len = std::min( 24, 200 / k );
+		const double s = k * span / 255.0 / pitch;
+		const double e = hElevation( pElevation( 30.0 ) ) * kPi / 180.0;
+		double worstEdge = 0.0;
+		std::string seen;
+		for( int edge = 0; edge < 4; ++edge )//left, right, bottom, top
+		{
+			const bool alongX = edge < 2;
+			Floats card       = flatCard( w, h, code8( 128 ), code8( 128 ), code8( 128 ) );
+			auto at = [ & ]( int i, int u ) {
+				//i: the distance from the edge along the ramp; u: across it.
+				const int n = alongX ? w : h;
+				const int t = edge % 2 == 0 ? i : n - 1 - i;
+				return alongX ? std::make_pair( t, u ) : std::make_pair( u, t );
+			};
+			const int across = alongX ? h : w;
+			for( int u = 0; u < across; ++u )
+				for( int i = 0; i < len; ++i )
+				{
+					const auto [ x, y ] = at( i, u );
+					for( int c = 0; c < 3; ++c )
+						card[ ( static_cast< size_t >( y ) * w + x ) * 4 + c ] = code8( 220 - k * i );
+				}
+			Rig r;
+			if( !startRig( r, w, h, perturb, &card ) )
+				return 1;
+			r.Set( PT_BACK_LIGHT, 0.0f );
+			r.Set( PT_FRONT_LIGHT, pFront( 1.0 ) );
+			r.Set( PT_LIGHT_ANGLE, pAngle( alongX ? 0.0 : 90.0 ) );
+			r.Set( PT_LIGHT_ELEVATION, pElevation( 30.0 ) );
+			if( !r.Render( 1 ) )
+				return 1;
+			const Floats out = r.Output();
+			//The slope along the lamp: thickness rises away from the left and
+			//bottom edges (with x or y), and toward the right and top ones.
+			const double sl  = edge % 2 == 0 ? s : -s;
+			auto lambert     = [ & ]( double q ) { return ( std::sin( e ) - q * std::cos( e ) ) / std::sqrt( 1.0 + q * q ); };
+			const double nl  = lambert( sl );
+			const double dnl = std::fabs( lambert( sl + 1e-6 ) - lambert( sl - 1e-6 ) ) / 2e-6;
+			for( int c = 0; c < 3; ++c )
+			{
+				const hp::Chan p = hp::chan( 0, c );
+				double q[ 2 ]    = {};
+				for( int j = 0; j < 2; ++j )
+				{
+					const int i         = j == 0 ? 0 : 4;
+					const double d      = thin + ( 1.0 - ( 220.0 - k * i ) / 255.0 ) * span;
+					const auto [ x, y ] = at( i, across / 2 );
+					q[ j ]              = linAt( out, w, x, y, c ) / hp::reflectance( p.K, p.S, d );
+				}
+				//d's float error and the recode move each slope by dd / pitch;
+				//R(d)'s by its own slope; the encode, float.
+				const double dd  = 2.0 * ulpOf( thick ) + kRecode * span;
+				const double dRr = std::fabs( hp::reflectance( p.K, p.S, 2.0 + 1e-4 ) - hp::reflectance( p.K, p.S, 2.0 - 1e-4 ) ) / 2e-4
+				                   / hp::reflectance( p.K, p.S, 2.0 );
+				const double tol = 2.0 * dnl * dd / pitch / nl + 2.0 * dRr * dd + 2.0 * kEncode + 32.0 * kFloat;
+				worstEdge        = worse( worstEdge, std::fabs( q[ 0 ] / q[ 1 ] - 1.0 ) / tol );
+				if( c == 1 )
+					seen += fmt( " %s %.6f", edge == 0 ? "left" : edge == 1 ? "right" : edge == 2 ? "bottom" : "top", q[ 0 ] / q[ 1 ] );
+			}
+		}
+		Check( worstEdge <= 1.0, fmt( "%4dx%-4d a ramp of slope %.3f into each edge under a front lamp along it: the edge pixel's shading over the inside's (green)%s "
+		                              "(want 1); worst error/tolerance %.3f (d's float error and the recode through the slope and R(d), the encode)",
+		                              w, h, s, seen.c_str(), worstEdge ) );
 	}
 	return Verdict();
 }
