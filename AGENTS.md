@@ -208,9 +208,10 @@ light); the weight 100 on the fit's constraint rows; kActiveWeight 1e-5; Light A
 Elevation 45°; Facing Viewer as the default; the lamp white and uniform; a dark room behind a
 front-lit plate.
 
-Not done: loading it into Resolume on any platform; a Windows build; a user guide, presets, an
-OpenFX port, a browser demo; looking at the demo clips through it as pictures rather than
-numbers; a lithophane photographed against the render.
+Not done: loading it into Resolume on any platform; a user guide, presets, an OpenFX port, a
+browser demo; looking at the demo clips through it as pictures rather than
+numbers; a lithophane photographed against the render. Windows is built by CI, and `tools/wincheck.ps1`
+loads the DLL as a host does.
 
 ## Would this hold on another rasteriser, at another raster?
 

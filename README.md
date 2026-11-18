@@ -54,7 +54,7 @@ Nothing moves with time.
 
 ## Status
 
-**v0.1.0, local only, 16 November 2026. Never loaded into Resolume.**
+**v0.1.0, 16 November 2026. Never loaded into Resolume.**
 
 ### Measured offline, on macOS
 
@@ -95,7 +95,8 @@ macOS only.
 
 - **No host has loaded it.** Not Arena, not Avenue, on any platform. `oxbow` (the fleet's test
   host) reads the bundle and renders through it, which is all.
-- **Windows** has never been built, and there is no CI.
+- **Windows** is built by CI (`ci.yml`), and `tools/wincheck.ps1` loads the DLL as a host
+  does and reads its name, id, type and parameters; no host has loaded it there.
 - **No real lithophane has been compared with it.** Every check is against the published
   measurements and the diffusion model, not against a photographed plate.
 - **Chosen, not measured:** the porcelain's absorption taken from its measured apparent
@@ -147,8 +148,8 @@ That's the whole lot: shader hygiene and `glslc`, a fresh universal build with n
 the bundle's architecture, plist and ad-hoc signature, a host's view of it through `oxbow`
 (required), every check at two rasters and again on the software renderer, the alpha check and
 Back Light's default on Arena's demo clips (required), the pipe, the negative controls, the
-mutants, the sweep for dead controls and the render cost. There is no CI: this script is the
-verification. `CLAUDE.md` lists the checks one by one; `./build/lptest --all` runs them all.
+mutants, the sweep for dead controls and the render cost. CI (`ci.yml`) builds macOS and
+Windows and runs the checks that need no GL; the pixel checks are this script's. `CLAUDE.md` lists the checks one by one; `./build/lptest --all` runs them all.
 
 Render a frame of your own:
 
