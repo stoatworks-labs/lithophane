@@ -48,6 +48,38 @@ same plate is a white relief: its carving catches the light, and thin places, wh
 the dark room through, read a little darker, so it carries a faint negative of the picture.
 Nothing is drawn: it all comes out of the thickness.
 
+<!-- downloads:start -->
+
+## Download
+
+**[v0.1.0](https://github.com/stoatworks-labs/lithophane/releases/tag/v0.1.0)** — prebuilt for macOS and Windows. Pick your platform:
+
+<details>
+<summary><b>macOS</b> — Universal (Apple Silicon + Intel)</summary>
+
+| Build | Download | Size |
+| --- | --- | --- |
+| Universal (Apple Silicon + Intel) · .dmg disk image | [`lithophane-0.1.0-macos-universal.dmg`](https://github.com/stoatworks-labs/lithophane/releases/download/v0.1.0/lithophane-0.1.0-macos-universal.dmg) | 252 KB |
+| Universal (Apple Silicon + Intel) · .zip archive | [`lithophane-macos-universal.zip`](https://github.com/stoatworks-labs/lithophane/releases/latest/download/lithophane-macos-universal.zip) | 211 KB |
+
+</details>
+
+<details>
+<summary><b>Windows</b> — x64</summary>
+
+| Build | Download | Size |
+| --- | --- | --- |
+| x64 · .exe installer | [`lithophane-0.1.0-windows-x86_64-setup.exe`](https://github.com/stoatworks-labs/lithophane/releases/download/v0.1.0/lithophane-0.1.0-windows-x86_64-setup.exe) | 259 KB |
+| x64 · .zip archive | [`lithophane-windows-x86_64.zip`](https://github.com/stoatworks-labs/lithophane/releases/latest/download/lithophane-windows-x86_64.zip) | 133 KB |
+
+</details>
+
+All builds, checksums and release notes: [github.com/stoatworks-labs/lithophane/releases](https://github.com/stoatworks-labs/lithophane/releases).
+
+macOS builds are signed and notarised and open normally. The Windows builds are unsigned, so SmartScreen warns once.
+
+<!-- downloads:end -->
+
 ## Controls
 
 | Group | |
