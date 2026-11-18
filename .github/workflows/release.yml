@@ -72,7 +72,7 @@ jobs:
       - name: Check the DLL (Windows)
         if: runner.os == 'Windows'
         run: |
-          ./tools/wincheck.ps1 -Dll "build/Release/Lithophane.dll" -Name "SW Lithophane" -Id LP01 -Kind effect -Params 15 -First "Thinnest"
+          ./tools/wincheck.ps1 -Dll "build/Release/Lithophane.dll" -Name "SW Lithophane" -Id LP01 -Kind effect -Params 16 -First "Thinnest"
           if( $LASTEXITCODE ) { exit $LASTEXITCODE }
 
       - name: Derive version

@@ -2,7 +2,7 @@
     What a host sees of a built Windows DLL, with no GL and no Resolume.
 
         tools/wincheck.ps1 -Dll build/Release/Lithophane.dll -Name "SW Lithophane" `
-                           -Id LP01 -Kind effect -Params 15 -First "Thinnest"
+                           -Id LP01 -Kind effect -Params 16 -First "Thinnest"
 
     It LOADS the DLL (so a missing runtime or dependency fails here, where
     dumpbin cannot see it), finds plugMain, and asks it what Resolume asks

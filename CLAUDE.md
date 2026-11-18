@@ -93,9 +93,12 @@ reconstruction (`Shaders.cpp`: spread, pass, `level()`), the intermediates' form
 - `lithophane_core` is an OBJECT library: the plugin registers itself from a file-scope
   constructor nothing references.
 - The macOS build must be universal. Check with `lipo`, never the build log.
-- **Provisional hand copies:** `source/StoatworksAbout*.h` (guide = "", no user guide) and
-  `ATTRIBUTIONS.md`. Once the project is registered in stoatworks-backend, `sync-about.py`
-  and `sync-attributions.py` generate them; edit them there then.
+- **Generated, never edited here:** `source/StoatworksAbout.h` (stoatworks-backend's
+  `sync-about.py`, from the website's `projects.json`: the hook, the guide, page and repo
+  links; with the User guide button the plugin declares 16 parameters) and `ATTRIBUTIONS.md`
+  (`sync-attributions.py`, from the backend's `attributions/derived.json`). The issue forms
+  are `sync-issue-templates.py`'s; `.github/FUNDING.yml` and `dependabot.yml` are the
+  fleet's.
 - `.github/workflows/`: `ci.yml` (macOS arm64 with `lptest --list`, `--offline` and glslc;
   Windows x64 with vcpkg's GLEW and `tools/wincheck.ps1`, which loads the DLL as a host does)
   and `release.yml` (a `v*` tag publishes the universal bundle and the x64 DLL, zips, a dmg
