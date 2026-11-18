@@ -1,8 +1,11 @@
 # lithophane
 
 > **AI-assisted project.** This codebase was created with [Claude](https://claude.com/claude-code)
-> (Anthropic), directed and reviewed by a human author. **It has never been loaded into
-> Resolume.** What's established is established by an offline harness, `lptest`, that drives
+> (Anthropic), directed and reviewed by a human author. In **Resolume Arena 7.29.0 on a Mac**
+> it loads with every control as declared and, over a still test card, holds still and changes
+> the picture with every control. On **Windows** its release build loads, registers and renders
+> in Arena 7.27.1 on software rendering, all 12 valued controls live. Everything else is
+> established by an offline harness, `lptest`, that drives
 > the real plugin class through the same `ProcessOpenGL` a host calls, in a headless GL
 > context, on this Mac's GPU at two rasters and on Apple's software renderer. Read off the
 > picture, each channel's transmission falls as **exp(−k d)** with the measured porcelain's k to
@@ -18,6 +21,22 @@
 
 The clip carved into a backlit porcelain plate, for [Resolume](https://resolume.com) Arena and
 Avenue: an FFGL effect, **SW Lithophane**.
+
+> **Photosensitivity note.** Lithophane adds no flashing of its own, but it lifts a clip's
+> black to a warm glow, so a dark clip's pulses can come out as large changes of brightness.
+> At its defaults, over Resolume's 33 demo clips (8 s each, xenon's rule: more than six
+> transitions in any second, over the whole frame or any third of it), NeonRoom2_32 went over
+> three flashes a second through it (7 transitions in a third of the frame; 4 on its own), and
+> Bass 006 and Beat 002 reached the line (6). At Back Light 16 none passed six. Flashing light
+> can trigger seizures in people with photosensitive epilepsy: the
+> [user guide](https://stoatworks-labs.com/software/lithophane/guide/#flashing) has the table.
+
+![A warm, honey-coloured picture of a night skyline: a soft bright sun behind rows of
+buildings, a glowing white sign in the sky, and windows that come through as soft points of
+light](docs/hero.png)
+
+<sub>One frame rendered by `lptest`, not captured from Resolume: the harness's card at the
+defaults but for Back Light 4.</sub>
 
 A lithophane is a plate of unglazed porcelain carved thick where the picture is dark and thin
 where it is light. Hold it up to a lamp and the picture appears. Light is absorbed on the way
@@ -54,7 +73,32 @@ Nothing moves with time.
 
 ## Status
 
-**v0.1.0, 16 November 2026. Never loaded into Resolume.**
+**v0.1.0, 18 November 2026.** A [user guide](https://stoatworks-labs.com/software/lithophane/guide/)
+(also [docs/USER-GUIDE.md](docs/USER-GUIDE.md)) and a [browser demo](#browser-demo); no presets.
+
+### In Resolume
+
+- **Windows, Arena 7.27.1** (win-lab, software rendering: Mesa llvmpipe, no GPU, no sound
+  device), the fleet's Arena gate on the DLL `release.yml` built from the registered tree:
+  it loads and registers (`SW Lithophane` / `LP01` / effect), all 17 host controls (the 16
+  declared plus Arena's Opacity) match their names, order, types, ranges and defaults, it
+  renders (89.8 levels from its bare input at the defaults), and Arena's log stays clean: 9
+  passed, 0 failed, 0 skipped. All 12 valued controls changed Arena's picture, Opacity
+  included; Relief Side, Light Angle and Light Elevation with the lamp in front (Back Light 0,
+  Front Light 1), Light Angle at 0° against 180°. Software rendering says nothing about a GPU
+  or speed.
+- **macOS, Arena 7.29.0** on Apple Silicon (macOS 26), the same run's universal bundle, over
+  REST with one layer added on top of an open show and a still of the harness's card on it:
+  Arena's log records `registered extension: 'SW Lithophane' uid: LP01 category: 1`; the
+  effect has all 16 controls, their defaults and the option names as declared, and the About
+  line reads `Lithophane v0.1.0`. From Arena's composition snapshot (mean difference in 8-bit
+  levels over the middle three-fifths): the effect at its defaults 138.0 from the bare clip;
+  two snapshots 3 s apart, nothing touched, **0.0** (nothing moves); Thinnest 68.8, Thickest
+  111.0, Porcelain to White PLA 32.4, Feldspar to Clay Porcelain 139.0, Mapping 5.7, Plate
+  Width 26.1, Back Light 93.0, Front Light 29.8; **Relief Side under back light alone 0.0**, as
+  the column model says; front-lit, Relief Side 4.2, Light Angle 3.7, Light Elevation 105.1;
+  Mix 0 against the bare clip **0.0**, and back at the defaults the first snapshot to 0.0. The
+  layer was removed, Arena quit without saving and the show file untouched.
 
 ### Measured offline, on macOS
 
@@ -93,10 +137,9 @@ macOS only.
 
 ### Not established
 
-- **No host has loaded it.** Not Arena, not Avenue, on any platform. `oxbow` (the fleet's test
-  host) reads the bundle and renders through it, which is all.
-- **Windows** is built by CI (`ci.yml`), and `tools/wincheck.ps1` loads the DLL as a host
-  does and reads its name, id, type and parameters; no host has loaded it there.
+- **Not through a show.** Arena has loaded it on both platforms over a still test card (above),
+  not with real footage, not on a GPU on Windows, and nothing has been timed inside Resolume.
+  Avenue has not been tried.
 - **No real lithophane has been compared with it.** Every check is against the published
   measurements and the diffusion model, not against a photographed plate.
 - **Chosen, not measured:** the porcelain's absorption taken from its measured apparent
@@ -110,10 +153,28 @@ macOS only.
 - **White PLA is over-blurred**: about a third of its light comes through nearly straight
   (haze 56–64%), which a diffusion model can't carry.
 - **The front-lit reflection is not blurred**, and the relief casts no shadows.
+- **Back Light's default puts the median demo clip's brightest 1% at the top code in red**, so
+  about half of Resolume's demo clips clip in red at it, and it was set for Porcelain: Feldspar
+  Porcelain and White PLA come out nearly white at it (the guide says to turn it down).
 - **Resolume's alpha.** The plugin treats a clip's colour as straight alpha, which is what
   Arena's DXV demo clips decode to; whether Resolume hands an effect premultiplied colour has
   not been checked.
-- No user guide, no presets and no OpenFX port. The browser demo below is a port, not the plugin.
+- No presets and no OpenFX port. The browser demo below is a port, not the plugin.
+
+### Open questions, decided for this release but not settled
+
+- **The widest blur scales** cost a whole group of passes (two at f = 8 or 32) for about
+  1.25e-4 of the light through 6 mm; dropping them would save the time and change the spec's
+  stated tolerance. Kept.
+- **Which face is carved.** No porcelain source read says; the printing guides put the relief
+  towards the viewer, which is the default. **Relief Side only shows under front light**:
+  under back light the column model can't tell the faces apart.
+- **White PLA looks over-blurred** (above). A sharp-plus-diffuse PLA would need a source for
+  the split against thickness.
+- **A gentler Back Light default** (the median clip's p95, or 0.9 of the top) would clip fewer
+  clips in red.
+- **No blur on the front-lit reflection, and no relief shadows**: at a low Light Elevation real
+  carved porcelain would show both.
 
 ## Browser demo
 

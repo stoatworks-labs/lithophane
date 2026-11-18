@@ -208,10 +208,18 @@ light); the weight 100 on the fit's constraint rows; kActiveWeight 1e-5; Light A
 Elevation 45°; Facing Viewer as the default; the lamp white and uniform; a dark room behind a
 front-lit plate.
 
-Not done: loading it into Resolume on any platform; a user guide, presets, an OpenFX port (the
-browser demo is a port, not the plugin: see Browser demo); looking at the demo clips through it
-as pictures rather than numbers; a lithophane photographed against the render. Windows is built by CI, and `tools/wincheck.ps1`
+In Resolume (2026-11-18, v0.1.0): the Arena gate on win-lab (7.27.1, llvmpipe) passed 9 of 9,
+all 12 valued controls live, with the three front-light controls held front-lit
+(`plugin-bench/arena/expect/lithophane.json`); Arena 7.29.0 on this Mac over REST, over a still
+of the harness's card, held still (0.0 between snapshots 3 s apart), changed the picture with
+every control, gave exactly 0.0 for Relief Side under back light alone and handed the clip back
+at Mix 0. The README's Status has the figures. Windows is built by CI, and `tools/wincheck.ps1`
 loads the DLL as a host does.
+
+Not done: a show, Avenue, a GPU on Windows, timing inside Resolume; presets, an OpenFX port
+(the browser demo is a port, not the plugin: see Browser demo); a lithophane photographed
+against the render. The user guide is `docs/USER-GUIDE.md`, built to the website by
+stoatworks-website's `scripts/build_guides.py`.
 
 ## Would this hold on another rasteriser, at another raster?
 

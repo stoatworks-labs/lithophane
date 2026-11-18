@@ -23,7 +23,7 @@ reconstruction (`Shaders.cpp`: spread, pass, `level()`), the intermediates' form
 - Fast dev build: add `-DCMAKE_OSX_ARCHITECTURES=arm64`
 - Build: `cmake --build build -j8`
 - Install to Resolume: `cmake --install build` (into Arena's Extra Effects).
-  Never from a shared session on this Mac: nothing here has been loaded into Arena.
+  Never from a shared session on a Mac where someone may be using Arena.
 - Render offline: `./build/lptest --out /tmp/l.png` (the defaults over the harness's card;
   one frame: nothing moves)
 - A clip of your own: `--clip clip.rgba` (raw RGBA at `--size`, top row first)
