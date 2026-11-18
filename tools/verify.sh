@@ -75,6 +75,7 @@ reserved_words || fail "a GLSL reserved word is used as an identifier"
 step "Shaders"
 #---------------------------------------------------------------------------
 tools/glslc.sh || fail "a shader does not compile"
+python3 demo/tools/check_shaders.py || fail "the demo's shaders or its ported C++ have drifted from the plugin's"
 
 #---------------------------------------------------------------------------
 step "Submodule"

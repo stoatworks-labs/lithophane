@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SW Lithophane — browser demo | Stoatworks Labs</title>
+    <meta name="description" content="Try SW Lithophane, an FFGL effect for Resolume, in your browser: your clip carved into a backlit porcelain plate, thick where the picture is dark and thin where it is light, the light absorbed and scattered through the thickness it crosses, with four materials and a front lamp on the relief. The plugin's own GLSL, ported to WebGL2 unedited, run by a JavaScript port of its CPU half checked by a reader and a crosscheck. A demo, not the plugin." />
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./vendor/kit.css" />
+    <link rel="stylesheet" href="./lithophane.css" />
+    <link rel="canonical" href="https://lithophane-demo.stoatworks-labs.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Stoatworks Labs" />
+    <meta property="og:title" content="SW Lithophane — browser demo | Stoatworks Labs" />
+    <meta property="og:description" content="Try SW Lithophane, an FFGL effect for Resolume, in your browser: your clip carved into a backlit porcelain plate, thick where the picture is dark and thin where it is light, the light absorbed and scattered through the thickness it crosses, with four materials and a front lamp on the relief. The plugin's own GLSL, ported to WebGL2 unedited, run by a JavaScript port of its CPU half checked by a reader and a crosscheck. A demo, not the plugin." />
+    <meta property="og:url" content="https://lithophane-demo.stoatworks-labs.com/" />
+    <meta property="og:image" content="https://stoatworks-labs.com/thumbs/lithophane.png" />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="720" />
+    <meta property="og:image:alt" content="SW Lithophane" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body data-plugin="lithophane">
+    <section class="lp-warning" id="photosensitivity" aria-labelledby="lp-warning-title">
+      <h2 class="lp-warning__title" id="lp-warning-title">Photosensitivity note</h2>
+      <p>
+        <strong>Lithophane adds no flashes of its own: nothing in it moves with time.</strong>
+        But a lamp behind a plate brightens a clip's dark parts, so a dark clip's own flicker
+        can become a large flash. Flashing light can trigger seizures in people with
+        photosensitive epilepsy.
+      </p>
+      <p>
+        At its defaults it goes over the line on one of Resolume's demo clips, NeonRoom2_32:
+        in that clip's worst second, over a third of the picture, the brightness swings 4
+        times on its own and 7 times through the plugin, which is three and a half flashes a
+        second (more than three is over the line). This page opens on the defaults over the
+        harness's card, which does not move, and that view, measured the same way from the
+        page's own output for 20 seconds, made no flash at all. The page's other clips, at
+        the defaults for 20 seconds each, made none across the picture and at most half a
+        flash a second in the worst third of it. A clip of your own is brightened the same
+        way. <strong>Pause</strong>, under the picture, stops it at once.
+      </p>
+    </section>
+
+    <main id="demo">
+      <noscript>
+        <h1>SW Lithophane</h1>
+        <p>
+          The clip carved into a backlit porcelain plate, for Resolume: an FFGL effect. The
+          plate is thick where the picture is dark and thin where it is light; held up to a
+          lamp, the light is absorbed on the way through, more in the blue than in the red, so
+          it comes through warm and redder where the plate is thick, and it scatters, so dark
+          detail is blurred more than bright detail. Lit from the front, the same plate is a
+          white relief. Nothing is drawn: it all comes out of the thickness.
+        </p>
+        <p>
+          This demo runs the plugin's shaders and a port of its CPU half in your browser, so
+          it needs JavaScript and WebGL2. The plugin itself, its source and its downloads are
+          on <a href="https://github.com/stoatworks-labs/lithophane">its repository</a>.
+        </p>
+        <ul>
+          <li><a href="https://github.com/stoatworks-labs/lithophane">Source on GitHub</a></li>
+        </ul>
+      </noscript>
+    </main>
+
+    <script type="module" src="./plugin.js"></script>
+    <script
+      src="./vendor/support-footer.js"
+      defer
+      data-app="Lithophane"
+      data-repo="https://github.com/stoatworks-labs/lithophane"
+      data-note="A browser demo of the plugin's shaders over a port of its CPU half. Nothing you load here leaves your machine."
+    ></script>
+  </body>
+</html>

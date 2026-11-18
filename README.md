@@ -113,7 +113,20 @@ macOS only.
 - **Resolume's alpha.** The plugin treats a clip's colour as straight alpha, which is what
   Arena's DXV demo clips decode to; whether Resolume hands an effect premultiplied colour has
   not been checked.
-- No user guide, no presets, no OpenFX port and no browser demo.
+- No user guide, no presets and no OpenFX port. The browser demo below is a port, not the plugin.
+
+## Browser demo
+
+[lithophane-demo.stoatworks-labs.com](https://lithophane-demo.stoatworks-labs.com/) runs the
+plugin's own GLSL in WebGL2, unedited, fed by a JavaScript port of its CPU half (the materials,
+the multipole profile, the 15-Gaussian fit, the kernels, the frame's plan and every
+conversion) that a reader and a crosscheck check, not the harness, over the harness's card, a
+generated clip or one you pick. The page makes each material's fit itself, in a Worker, as the
+plugin does the first time a material is chosen. Run against `lptest --pipe` on the same
+frames, 29 of 33 cases came out identical to the bit; in the other four, 6 pixels in all were
+one 8-bit level apart (`demo/tools/crosscheck/`; the figures are in AGENTS.md). It opens on the
+plugin's defaults, with a photosensitivity note at the top. It is a demo, not the plugin, and
+the page lists what it leaves out.
 
 ## Build
 

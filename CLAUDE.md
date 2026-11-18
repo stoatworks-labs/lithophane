@@ -105,6 +105,17 @@ reconstruction (`Shaders.cpp`: spread, pass, `level()`), the intermediates' form
 - `~/Projects/resolume/lithophane`, public at github.com/stoatworks-labs/lithophane. The spec
   is `~/Projects/resolume/specs/SPEC-lithophane.md`.
 
+## Browser demo
+- `demo/` is served at https://lithophane-demo.stoatworks-labs.com/ by the Worker in
+  `wrangler.toml` (a route, plus a proxied AAAA `100::` record for `lithophane-demo`: delete the
+  record and the page goes dark while deploys stay green); `deploy.yml` redeploys it on every
+  push to main, by hand `cf-run npx wrangler deploy`. `demo/shaders.js` is a copy (after a
+  shader change: `python3 demo/tools/check_shaders.py --write`); `demo/plate.js` and
+  `demo/port.js` are hand ports of Plate.cpp, Controls.cpp and Lithophane.cpp: change them with
+  the C++, then `check_shaders.py --hashes` and `demo/tools/crosscheck/crosscheck.py` (Chrome and
+  a GPU; figures in AGENTS.md). `verify.sh` fails on drift. `demo/vendor/` is the shared kit:
+  never edit it. Keep the photosensitivity note at the top of the page.
+
 ## Diagnostics
 
 `source/Diag.{h,cpp}`: log file only, no crash handler (this runs inside Resolume). Each

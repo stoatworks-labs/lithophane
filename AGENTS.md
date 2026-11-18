@@ -208,9 +208,9 @@ light); the weight 100 on the fit's constraint rows; kActiveWeight 1e-5; Light A
 Elevation 45°; Facing Viewer as the default; the lamp white and uniform; a dark room behind a
 front-lit plate.
 
-Not done: loading it into Resolume on any platform; a user guide, presets, an OpenFX port, a
-browser demo; looking at the demo clips through it as pictures rather than
-numbers; a lithophane photographed against the render. Windows is built by CI, and `tools/wincheck.ps1`
+Not done: loading it into Resolume on any platform; a user guide, presets, an OpenFX port (the
+browser demo is a port, not the plugin: see Browser demo); looking at the demo clips through it
+as pictures rather than numbers; a lithophane photographed against the render. Windows is built by CI, and `tools/wincheck.ps1`
 loads the DLL as a host does.
 
 ## Would this hold on another rasteriser, at another raster?
@@ -298,6 +298,90 @@ all three because the default Front Light is 0 and they act on the front light o
 Side has no effect under back light in this model, by the column approximation). Nothing is
 barely alive. The smallest live ones are the front light's own: Relief Side 1.3 and Light Angle
 1.5, with Front Light at 0.5.
+
+## Browser demo
+
+https://lithophane-demo.stoatworks-labs.com/ (`demo/`, the Worker in `wrangler.toml`: a route,
+plus a proxied AAAA `100::` record for `lithophane-demo` made through the API on 2026-11-18;
+delete the record and the page goes dark while deploys stay green). `deploy.yml` redeploys it
+on every push to main.
+
+- **What is the plugin's and what is not.** `demo/shaders.js` is spliced from `Shaders.cpp`
+  (kVersion, kQuadVertex, kCommon and the four fragments) by
+  `demo/tools/check_shaders.py --write`; `tools/verify.sh` runs the check, which fails on a
+  changed character in a piece, on a change to how the pieces are joined (Shaders.cpp's
+  Assemble, Shaders.h's Pass, kKernelCentre, kKernelTaps and kMaxLevels, Lithophane.cpp's stage
+  list), on a uniform `port.js` never names or sets as a float when it is an integer, and on
+  any change to the C++ the port was translated from (SHA-256 of Plate.{h,cpp},
+  Controls.{h,cpp}, MultiTarget::Ensure, Lithophane.h's PluginHooks and seven Lithophane.cpp
+  functions; `--hashes` prints new ones once a reader has carried a change across).
+  `demo/plate.js` is Plate.cpp and Controls.cpp by hand; `demo/port.js` is Lithophane.cpp's
+  frame (InitGL, ensureBuffers, setKernels, render, ProcessOpenGL, SetFloatParameter, with the
+  test hooks fixed at their defaults) and MultiTarget; `demo/fit-worker.js` runs plate.js's
+  TableFor in a module Worker. `demo/plugin.js` is the page: the panel, the harness's card in
+  GLSL (the default clip), the fit queue, the line under the picture, 13 presets of its own and
+  `window.lithophaneDemo` for the crosscheck.
+- **The fit is made in the page**, in the Worker: all four materials at load, the one on screen
+  first, about 120 ms each on this Mac. Nothing is drawn for a material until its table is
+  back, and the line under the picture says "Fitting" meanwhile. There is no precomputed table.
+  If the Worker cannot start, the fit runs on the page's own thread.
+- **Numbers** (`demo/tools/crosscheck/port_numbers.py`: compiles the plugin's Plate.cpp and
+  Controls.cpp into `plate_print.cpp`, runs plate.js through `plate_print.mjs` in node, and
+  compares): 3,376,493 numbers over 396 plans (96 fixed, 300 random, seed 20261118). Every
+  integer, string and float the GPU gets is equal: the plans, groups, scales and kernel radii,
+  the 475,132 kernel floats and the uniforms uPitch, uSpan and uThin to the bit; the
+  conversions within 1e-12. The fit's weights are within 7.4e-8 absolute of the C++'s, the
+  uploaded weight table within 2.4e-7 and the worst-L1 figures within 2.7e-7 relative: the
+  fit's normal equations carry the last bits of JavaScript's exp and log, which are not
+  Apple's, into the small weights. So the tool judges the fit with an absolute tolerance
+  (1e-6), not by its bits.
+- **Crosscheck** (`demo/tools/crosscheck/crosscheck.py`, by hand: needs Chrome and a GPU), M4
+  Max, macOS 26.4.1, Chrome 157 (ANGLE on Metal) against `lptest --pipe` (GL 4.1), 18 November
+  2026, 320×180 unless named, every frame compared. 33 cases: the card at the defaults; each
+  material; Linear Light; a flat 0.5 mm plate; a 3–6 mm plate; inverted (Thinnest above
+  Thickest); Plate Width 20 and 400 mm; Back Light 0 and 16; front-lit four ways; Mix 0.5;
+  cues (Material at frame 1, Mapping at frame 2, Plate Width ramping over frames 0–3); the
+  defaults at 640×360, 960×540, 1280×720, 1920×1080 and 333×187; the most groups (eight) at
+  1280×720; and each of the kit's clips (scene, spot, ramp, bars, grid, detail, alpha, alpha at
+  Mix 0.5, scene front-lit), handed to lptest as the page drew them.
+
+  | case | identical | max |
+  | --- | --- | --- |
+  | the other 29 | **100%** | **0** |
+  | cues | 99.9996% (one pixel, frame 1) | 1 |
+  | defaults at 1280×720 | 99.9999% (one pixel) | 1 |
+  | defaults at 1920×1080 | 99.9999% (three pixels) | 1 |
+  | scene, front-lit | 99.9983% (one pixel) | 1 |
+
+  Six pixels in about 6.7 million were one 8-bit level apart, none more. With the C++'s
+  weights handed to the page (`--cpp-weights`), the 1280×720 and 1920×1080 pixels go, so they
+  are the fit's last bits; the other two stay, so they are GPU arithmetic. Handing the page the
+  clip as lptest holds it (`--input float`, RGBA32F codes / 255) changes no figure. The table of
+  controls matches `lptest --list` (11 controls: names, kinds, defaults, order) and lptest
+  accepts all 8 option elements by name; every uniform is set (carve declares kCommon's Table,
+  RowOrigin, RowStep and RowCount and never reads them, so the compiler drops them, as in the
+  plugin), no GL error, no frame refused, no plan truncated. The page's card is within one
+  level of the harness's at every page size (93.6–95.3% identical: a float port of a picture
+  drawn in double); at 333×187, not a page size, six pixels on a building's edge fall the other
+  way (128 levels), reported and not failed. Negative controls, the page one slider step off,
+  all caught: Thickest 46.96% identical, Thinnest 82.37%, Back Light 62.65%, Plate Width
+  90.13%, Light Angle front-lit 93.84% (max 9). Not covered: a phone GPU.
+- **Flashes on the page:** its default view (the harness's card at the defaults, 960×540,
+  rendered through `window.lithophaneDemo` into an RGBA8 target at 60 fps for 20 s, written
+  lossless and run through xenon's `flashcheck.py`): 0 transitions, whole frame and every
+  window. The kit's seven other clips at the defaults, 20 s each: 0 over the whole frame; the
+  worst window 2 transitions in 20 s (ramp), never more than 1 in a second. No Start gate. The
+  note at the top of the page quotes the release survey's NeonRoom2_32 figures (4 transitions
+  bare and 7 through the plugin in its worst second, over a third of the frame).
+- **What the page says it leaves out** (its differences list): the CPU half is a port, checked
+  by a reader and this crosscheck, not by the harness; the fit is made in the page; alpha (the
+  kit's clips are premultiplied, the plugin assumes straight alpha); the default card is a
+  float port of lptest's double one; scale follows Plate Width in millimetres, so a bigger
+  raster blurs over more pixels, as in the plugin; at most eight groups (the line under the
+  picture says when the widest are dropped; no page size reaches eight); highp everywhere,
+  checked on a desktop GPU only; the line under the picture is the page's, not the plugin's;
+  the presets are the page's; the About block, the log file and the harness's negative
+  controls are absent; and what the harness measured that the page did not.
 
 ## Open questions
 
