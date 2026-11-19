@@ -80,6 +80,14 @@ macOS builds are signed and notarised and open normally. The Windows builds are 
 
 <!-- downloads:end -->
 
+## Video
+
+> **Photosensitivity warning:** this effect lifts a clip's black to a warm glow, so it can turn a
+> dark clip's flicker into flashing. Large-area flashes in the video are kept to three a second
+> or fewer.
+
+[![Lithophane: your clip carved into backlit porcelain, for Resolume](docs/video-thumb.png)](https://www.youtube.com/watch?v=_xDdQPwp-GM)
+
 ## Controls
 
 | Group | |
